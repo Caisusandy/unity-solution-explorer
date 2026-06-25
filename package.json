@@ -2,7 +2,7 @@
   "name": "unity-solution-explorer",
   "displayName": "Unity Solution Explorer",
   "description": "Browse Unity .sln/.csproj in the sidebar; ignores non-Unity editor files; drag-drop move within assembly, open in editor/Chat; supports .cs/.shader/.xml and right-click add/rename/delete. 在侧边栏按 .sln/.csproj 展示 Unity 解决方案与程序集结构，支持树内拖拽移动（确认后）、拖入编辑器/聊天、多选拖拽，以及 .cs/.shader/.xml/.txt/.json、右键新建/重命名/删除、排除项目配置",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "publisher": "Seacysin",
   "engines": {
     "vscode": "^1.74.0"
@@ -36,48 +36,48 @@
     "commands": [
       {
         "command": "unitySolutionExplorer.refresh",
-        "title": "刷新解决方案",
+        "title": "Refresh Solution",
         "icon": "$(refresh)"
       },
       {
         "command": "unitySolutionExplorer.newFile",
-        "title": "新建文件"
+        "title": "New File"
       },
       {
         "command": "unitySolutionExplorer.renameFolder",
-        "title": "重命名文件夹"
+        "title": "Rename Folder"
       },
       {
         "command": "unitySolutionExplorer.newFolder",
-        "title": "新建文件夹"
+        "title": "New Folder"
       },
       {
         "command": "unitySolutionExplorer.deleteFolder",
-        "title": "删除文件夹"
+        "title": "Delete Folder"
       },
       {
         "command": "unitySolutionExplorer.revealFolderInExplorer",
-        "title": "在资源管理器中打开文件夹"
+        "title": "Reveal Folder in System Explorer"
       },
       {
         "command": "unitySolutionExplorer.copyFolderPath",
-        "title": "复制绝对路径"
+        "title": "Copy Absolute Path"
       },
       {
         "command": "unitySolutionExplorer.renameFile",
-        "title": "重命名文件"
+        "title": "Rename File"
       },
       {
         "command": "unitySolutionExplorer.deleteFile",
-        "title": "删除文件"
+        "title": "Delete File"
       },
       {
         "command": "unitySolutionExplorer.revealFileInExplorer",
-        "title": "在资源管理器中打开所在文件夹"
+        "title": "Reveal in System Explorer"
       },
       {
         "command": "unitySolutionExplorer.copyFilePath",
-        "title": "复制绝对路径"
+        "title": "Copy Absolute Path"
       }
     ],
     "menus": {
@@ -150,7 +150,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "不在 Solution Explorer 中显示的项目（程序集）名称列表，可与 .vscode/unity-solution-explorer.json 合并"
+          "description": "Project (assembly) names to hide from Solution Explorer. Merged with .vscode/unity-solution-explorer.json"
         },
         "unitySolutionExplorer.additionalFileExtensions": {
           "type": "array",
@@ -158,7 +158,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "除内置 (.cs/.shader/.xml/.txt/.json) 外，树中要展示的额外扩展名，如 [\".dll\"]。可与工作区 .vscode/unity-solution-explorer.json 中的 additionalFileExtensions 合并"
+          "description": "Extra file extensions to show in the tree besides built-in types (.cs, .shader, .xml, .txt, .json). Merged with additionalFileExtensions in .vscode/unity-solution-explorer.json"
         },
         "unitySolutionExplorer.extraSolutionFolders": {
           "type": "array",
@@ -166,7 +166,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "在解决方案根额外展示的目录（相对工作区根），如 [\".cursor\", \".claude\"]。推荐写在项目 .vscode/settings.json"
+          "description": "Extra folders at solution root (paths relative to workspace root), e.g. [\".cursor\", \".claude\"]. Prefer project .vscode/settings.json"
         }
       }
     }

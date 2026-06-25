@@ -130,14 +130,18 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
     const maxLines = 10;
     const lines = plan.slice(0, maxLines).map((p) => `· ${p.label}${p.type === 'folder' ? '/' : ''}`);
     const suffix =
-      plan.length > maxLines ? `\n… 等共 ${plan.length} 项` : plan.length > 1 ? `\n共 ${plan.length} 项` : '';
+      plan.length > maxLines
+        ? `\n… and ${plan.length} items total`
+        : plan.length > 1
+          ? `\n${plan.length} items total`
+          : '';
     const choice = await vscode.window.showWarningMessage(
-      `确定要将以下内容移动到文件夹「${destLabel}」吗？\n\n${lines.join('\n')}${suffix}`,
+      `Move the following into "${destLabel}"?\n\n${lines.join('\n')}${suffix}`,
       { modal: true },
-      '移动',
-      '取消'
+      'Move',
+      'Cancel'
     );
-    return choice === '移动';
+    return choice === 'Move';
   }
 
   handleDrag(source: readonly SolutionTreeItem[], dataTransfer: vscode.DataTransfer): void {
@@ -169,7 +173,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
     const resolved = resolveDropTarget(target);
     if (!resolved) {
       vscode.window.showWarningMessage(
-        '请将文件或文件夹拖到程序集、文件夹或文件上（拖到文件表示放入其所在文件夹）。'
+        'Drop onto an assembly, folder, or file (dropping on a file moves into its parent folder).'
       );
       return;
     }
@@ -186,11 +190,11 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
       const plan: MovePlanEntry[] = [];
       for (const src of roots) {
         if (!src.projectCsprojPath || src.projectCsprojPath !== projectCsprojPath) {
-          vscode.window.showWarningMessage('不支持跨程序集拖拽，仅可在同一 .csproj 范围内移动。');
+          vscode.window.showWarningMessage('Cross-assembly drag is not supported. Move within the same .csproj only.');
           return;
         }
         if (src.type === 'folder' && folderWouldBeInsideItself(src.fullPath, destDir)) {
-          vscode.window.showErrorMessage('不能把文件夹移动到其自身或其子文件夹内。');
+          vscode.window.showErrorMessage('Cannot move a folder into itself or a subfolder.');
           return;
         }
         const newPath = path.join(destDir, path.basename(src.fullPath));
@@ -239,7 +243,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
         if (!fs.existsSync(srcPath)) continue;
         const rel = path.relative(projectDir, srcPath);
         if (rel.startsWith('..') || rel === '') {
-          vscode.window.showWarningMessage('只能从当前程序集目录内拖入文件或文件夹。');
+          vscode.window.showWarningMessage('Only files or folders inside the target assembly directory can be dropped here.');
           return;
         }
         const stat = fs.statSync(srcPath);
@@ -247,7 +251,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
         if (pathKey(srcPath) === pathKey(newPath)) continue;
         if (stat.isDirectory()) {
           if (folderWouldBeInsideItself(srcPath, destDir)) {
-            vscode.window.showErrorMessage('不能把文件夹移动到其自身或其子文件夹内。');
+            vscode.window.showErrorMessage('Cannot move a folder into itself or a subfolder.');
             return;
           }
           plan.push({
@@ -292,7 +296,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
       return true;
     }
     if (fs.existsSync(newPath)) {
-      vscode.window.showErrorMessage(`目标已存在: ${path.basename(newPath)}`);
+      vscode.window.showErrorMessage(`Target already exists: ${path.basename(newPath)}`);
       return false;
     }
     try {
@@ -304,7 +308,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
       }
       return true;
     } catch (e) {
-      vscode.window.showErrorMessage('移动失败: ' + (e as Error).message);
+      vscode.window.showErrorMessage('Move failed: ' + (e as Error).message);
       return false;
     }
   }
@@ -320,7 +324,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
       return true;
     }
     if (fs.existsSync(newPath)) {
-      vscode.window.showErrorMessage(`目标已存在: ${path.basename(newPath)}`);
+      vscode.window.showErrorMessage(`Target already exists: ${path.basename(newPath)}`);
       return false;
     }
     try {
@@ -332,7 +336,7 @@ export class SolutionTreeDragAndDropController implements vscode.TreeDragAndDrop
       }
       return true;
     } catch (e) {
-      vscode.window.showErrorMessage('移动失败: ' + (e as Error).message);
+      vscode.window.showErrorMessage('Move failed: ' + (e as Error).message);
       return false;
     }
   }

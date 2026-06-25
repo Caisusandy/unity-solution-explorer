@@ -7,7 +7,8 @@ import { PendingStore } from '../pendingStore';
 import { SolutionTreeItem, buildFolderTree, buildFolderTreeFromDisk } from './treeNodes';
 import * as fs from 'fs';
 
-const EXPANDED_PROJECTS_KEY = 'unitySolutionExplorer.expandedProjects';
+/** project + folder 展开路径（复用 key 以兼容旧版仅 project 的持久化数据） */
+const EXPANDED_NODES_KEY = 'unitySolutionExplorer.expandedProjects';
 
 export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<SolutionTreeItem | undefined | void>();
@@ -20,6 +21,12 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
   private filePathToItem = new Map<string, SolutionTreeItem>();
   private treeView: vscode.TreeView<SolutionTreeItem> | undefined;
   private pendingStore: PendingStore;
+  private rootsLoadPromise: Promise<SolutionTreeItem[]> | null = null;
+
+  /** 供 extension 层做路径去重（与内部 pathKey 一致） */
+  normalizePathKey(p: string): string {
+    return this.pathKey(p);
+  }
 
   private pathKey(p: string): string {
     try {
@@ -40,20 +47,20 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     );
   }
 
-  /** 持久化/移除项目节点的展开状态（仅 project 层级） */
+  /** 持久化/移除 project 与 folder 节点的展开状态（仅用户手动折叠时删除） */
   private saveExpanded(element: SolutionTreeItem, expanded: boolean): void {
-    if (element.type !== 'project' || !element.fullPath) return;
+    if ((element.type !== 'project' && element.type !== 'folder') || !element.fullPath) return;
     const key = this.pathKey(element.fullPath);
-    const list = this.context.workspaceState.get<string[]>(EXPANDED_PROJECTS_KEY) ?? [];
+    const list = this.context.workspaceState.get<string[]>(EXPANDED_NODES_KEY) ?? [];
     const set = new Set(list);
     if (expanded) set.add(key);
     else set.delete(key);
-    this.context.workspaceState.update(EXPANDED_PROJECTS_KEY, [...set]);
+    this.context.workspaceState.update(EXPANDED_NODES_KEY, [...set]);
   }
 
-  /** 读取上次持久化的展开项目 key 集合 */
-  private getExpandedProjectKeys(): Set<string> {
-    const list = this.context.workspaceState.get<string[]>(EXPANDED_PROJECTS_KEY) ?? [];
+  /** 读取上次持久化的展开节点 key 集合 */
+  private getExpandedNodeKeys(): Set<string> {
+    const list = this.context.workspaceState.get<string[]>(EXPANDED_NODES_KEY) ?? [];
     return new Set(list);
   }
 
@@ -78,47 +85,91 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     return undefined;
   }
 
-  /** 在树中展开并定位到指定文件路径（如当前打开的文件） */
-  async revealFileInTree(filePath: string): Promise<void> {
-    if (!this.treeView || !filePath) return;
-    const key = this.pathKey(filePath);
-
-    if (this.projectDirByCsprojPath.size === 0) {
-      this._onDidChangeTreeData.fire();
-      await new Promise((r) => setTimeout(r, 800));
+  /** 在内存中建立 solution 根索引，与 TreeView 共用同一次 getSolutionRoots，不触发刷新 */
+  private ensureRootsLoaded(
+    workspaceFolders: readonly vscode.WorkspaceFolder[]
+  ): Promise<SolutionTreeItem[]> {
+    if (!this.rootsLoadPromise) {
+      this.rootsLoadPromise = this.getSolutionRoots(workspaceFolders);
     }
+    return this.rootsLoadPromise;
+  }
 
-    let csprojPath: string | undefined;
-    let longest = 0;
-    for (const [dir, csproj] of this.projectDirByCsprojPath) {
-      const d = this.pathKey(dir);
-      const keyWithSep = d + (d.endsWith(path.sep) ? '' : path.sep);
-      if (key === d || key.startsWith(keyWithSep)) {
-        if (d.length > longest) {
-          longest = d.length;
-          csprojPath = csproj;
-        }
+  private async ensureRootsIndexed(): Promise<void> {
+    if (this.projectNodeByCsprojPath.size > 0) return;
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders?.length) return;
+    await this.ensureRootsLoaded(workspaceFolders);
+  }
+
+  private fileUnderProjectDir(filePathKey: string, csprojPath: string): boolean {
+    const projectDir = this.pathKey(path.dirname(csprojPath));
+    const keyWithSep = projectDir + (projectDir.endsWith(path.sep) ? '' : path.sep);
+    return filePathKey === projectDir || filePathKey.startsWith(keyWithSep);
+  }
+
+  /** 在全部程序集中查找实际包含该文件的 .csproj（Unity 多 csproj 同目录） */
+  private async resolveCsprojContainingFile(filePath: string): Promise<string | undefined> {
+    const key = this.pathKey(filePath);
+    for (const csprojPath of this.projectNodeByCsprojPath.keys()) {
+      if (!this.fileUnderProjectDir(key, csprojPath)) continue;
+      if (await this.fileExistsInProjectTree(csprojPath, filePath)) {
+        return csprojPath;
       }
     }
-    if (!csprojPath) return;
-    const projectNode = this.projectNodeByCsprojPath.get(csprojPath);
-    if (!projectNode) return;
+    return undefined;
+  }
+
+  /** 检查文件是否存在于项目树数据中（不依赖 TreeView 是否已展开） */
+  private fileExistsInItems(items: SolutionTreeItem[], targetKey: string): boolean {
+    for (const item of items) {
+      if (item.type === 'file' && item.fullPath && this.pathKey(item.fullPath) === targetKey) {
+        return true;
+      }
+      if (item.children?.length && this.fileExistsInItems(item.children, targetKey)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async fileExistsInProjectTree(csprojPath: string, filePath: string): Promise<boolean> {
+    const items = await this.loadOneProjectTree(csprojPath);
+    return this.fileExistsInItems(items, this.pathKey(filePath));
+  }
+
+  /**
+   * 在树中展开并定位到指定文件路径。
+   * 仅当文件确实存在于树列表中时才 reveal；失败时不改动展开状态。
+   */
+  async revealFileInTree(filePath: string): Promise<boolean> {
+    if (!this.treeView || !filePath) return false;
+    const key = this.pathKey(filePath);
+
+    await this.ensureRootsIndexed();
 
     let item = this.findFileItemByPath(key);
     if (item) {
       await this.treeView.reveal(item, { select: true, focus: false, expand: 3 });
-      return;
+      return true;
     }
 
+    const csprojPath = await this.resolveCsprojContainingFile(filePath);
+    if (!csprojPath) return false;
+
+    const projectNode = this.projectNodeByCsprojPath.get(csprojPath);
+    if (!projectNode) return false;
+
     await this.treeView.reveal(projectNode, { expand: true });
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 50));
       item = this.findFileItemByPath(key);
       if (item) {
         await this.treeView.reveal(item, { select: true, focus: false, expand: 3 });
-        return;
+        return true;
       }
     }
+    return false;
   }
 
   private registerFileItems(items: SolutionTreeItem[]): void {
@@ -153,11 +204,6 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
       if (node) this._onDidChangeTreeData.fire(node);
     });
     this.context.subscriptions.push(watcher);
-
-    const onFocus = vscode.window.onDidChangeWindowState((e) => {
-      if (e.focused) this._onDidChangeTreeData.fire();
-    });
-    this.context.subscriptions.push(onFocus);
   }
 
   getPendingStore(): PendingStore {
@@ -165,6 +211,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
   }
 
   refresh(): void {
+    this.rootsLoadPromise = null;
     this._onDidChangeTreeData.fire();
   }
 
@@ -192,7 +239,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     }
 
     if (!element) {
-      return this.getSolutionRoots(workspaceFolders);
+      return this.ensureRootsLoaded(workspaceFolders);
     }
 
     if (element.type === 'solution') {
@@ -222,9 +269,15 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     this.projectDirByCsprojPath.clear();
     this.filePathToItem.clear();
 
+    const expandedKeys = this.getExpandedNodeKeys();
+
     for (const folder of workspaceFolders) {
       const extraFolderRels = getExtraSolutionFolders(folder.uri.fsPath);
-      const extraFolderNodes = this.buildExtraSolutionFolderNodes(folder.uri.fsPath, extraFolderRels);
+      const extraFolderNodes = this.buildExtraSolutionFolderNodes(
+        folder.uri.fsPath,
+        extraFolderRels,
+        expandedKeys
+      );
       const slnFiles = await vscode.workspace.findFiles(
         new vscode.RelativePattern(folder, '**/*.sln'),
         null,
@@ -241,7 +294,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
           const filtered =
             excludeSet.size > 0 ? projects.filter((p) => !excludeSet.has(p.name)) : projects;
           const solutionName = path.basename(slnPath, '.sln');
-          const projectNodes = await this.loadProjectNodes(filtered);
+          const projectNodes = await this.loadProjectNodes(filtered, expandedKeys);
           const rootChildren = [...projectNodes, ...extraFolderNodes];
           const solutionItem = new SolutionTreeItem(
             solutionName,
@@ -256,7 +309,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         } catch (e) {
           roots.push(
             new SolutionTreeItem(
-              path.basename(slnPath) + ' (解析失败)',
+              path.basename(slnPath) + ' (parse failed)',
               'solution',
               slnPath,
               [],
@@ -270,7 +323,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     if (roots.length === 0) {
       return [
         new SolutionTreeItem(
-          '未找到 .sln 文件',
+          'No .sln file found',
           'solution',
           '',
           undefined,
@@ -283,7 +336,8 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
 
   private buildExtraSolutionFolderNodes(
     workspaceRoot: string,
-    folderRels: string[]
+    folderRels: string[],
+    expandedKeys: Set<string>
   ): SolutionTreeItem[] {
     const nodes: SolutionTreeItem[] = [];
     for (const rel of folderRels) {
@@ -296,15 +350,18 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         continue;
       }
       if (!stat.isDirectory()) continue;
-      const children = buildFolderTreeFromDisk(fullPath);
+      const children = buildFolderTreeFromDisk(fullPath, expandedKeys);
       const label = path.basename(fullPath);
+      const shouldExpand = expandedKeys.has(this.pathKey(fullPath));
       nodes.push(
         new SolutionTreeItem(
           label,
           'folder',
           fullPath,
           children,
-          vscode.TreeItemCollapsibleState.Collapsed
+          shouldExpand
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.Collapsed
         )
       );
     }
@@ -312,16 +369,16 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
   }
 
   private async loadProjectNodes(
-    projects: { name: string; absolutePath: string }[]
+    projects: { name: string; absolutePath: string }[],
+    expandedKeys: Set<string>
   ): Promise<SolutionTreeItem[]> {
-    const expandedKeys = this.getExpandedProjectKeys();
     const nodes: SolutionTreeItem[] = [];
     for (const proj of projects) {
       try {
         if (!fs.existsSync(proj.absolutePath)) {
           nodes.push(
             new SolutionTreeItem(
-              proj.name + ' (文件不存在)',
+              proj.name + ' (file missing)',
               'project',
               proj.absolutePath,
               [],
@@ -335,8 +392,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         const projectDir = path.dirname(proj.absolutePath);
         const csprojKey = this.pathKey(proj.absolutePath);
         const isAssemblyCSharp = path.basename(proj.absolutePath) === 'Assembly-CSharp.csproj';
-        const shouldExpand =
-          expandedKeys.has(csprojKey) || isAssemblyCSharp;
+        const shouldExpand = expandedKeys.has(csprojKey) || isAssemblyCSharp;
         const projectItem = new SolutionTreeItem(
           info.assemblyName || proj.name,
           'project',
@@ -354,7 +410,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
       } catch (e) {
         nodes.push(
           new SolutionTreeItem(
-            proj.name + ' (解析失败)',
+            proj.name + ' (parse failed)',
             'project',
             proj.absolutePath,
             [],
@@ -371,6 +427,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
    */
   private async loadOneProjectTree(csprojPath: string): Promise<SolutionTreeItem[]> {
     const projectDir = path.dirname(csprojPath);
+    const expandedKeys = this.getExpandedNodeKeys();
     try {
       if (!fs.existsSync(csprojPath)) {
         return [];
@@ -390,7 +447,8 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         projectDir,
         csprojPath,
         pendingAfter.folders,
-        pendingAfter.files
+        pendingAfter.files,
+        expandedKeys
       );
     } catch {
       return [];

@@ -47,6 +47,27 @@ interface FolderNode {
   files: string[];
 }
 
+function pathKeyForExpand(p: string): string {
+  try {
+    const resolved = path.resolve(p);
+    const n = path.normalize(resolved);
+    return process.platform === 'win32' ? n.toLowerCase() : n;
+  } catch {
+    const n = path.normalize(p);
+    return process.platform === 'win32' ? n.toLowerCase() : n;
+  }
+}
+
+function folderCollapsibleState(
+  fullPath: string,
+  expandedKeys?: Set<string>
+): vscode.TreeItemCollapsibleState {
+  if (expandedKeys?.has(pathKeyForExpand(fullPath))) {
+    return vscode.TreeItemCollapsibleState.Expanded;
+  }
+  return vscode.TreeItemCollapsibleState.Collapsed;
+}
+
 function sortItems(items: SolutionTreeItem[]): SolutionTreeItem[] {
   return items.sort((a, b) => {
     const aIsDir = a.type === 'folder';
@@ -83,7 +104,8 @@ export function buildFolderTree(
   baseDir: string,
   projectCsprojPath?: string,
   pendingFolders: string[] = [],
-  pendingFiles: string[] = []
+  pendingFiles: string[] = [],
+  expandedKeys?: Set<string>
 ): SolutionTreeItem[] {
   const root: FolderNode = { name: '', fullPath: baseDir, children: new Map(), files: [] };
 
@@ -144,7 +166,7 @@ export function buildFolderTree(
           'folder',
           child.fullPath,
           childItems,
-          vscode.TreeItemCollapsibleState.Collapsed,
+          folderCollapsibleState(child.fullPath, expandedKeys),
           csprojPath
         )
       );
@@ -168,7 +190,10 @@ export function buildFolderTree(
 }
 
 /** 递归读取磁盘目录，构建对应的树节点（目录在前，名称排序）。 */
-export function buildFolderTreeFromDisk(baseDir: string): SolutionTreeItem[] {
+export function buildFolderTreeFromDisk(
+  baseDir: string,
+  expandedKeys?: Set<string>
+): SolutionTreeItem[] {
   if (!fs.existsSync(baseDir)) return [];
   let stat: fs.Stats;
   try {
@@ -197,7 +222,7 @@ export function buildFolderTreeFromDisk(baseDir: string): SolutionTreeItem[] {
             'folder',
             fullPath,
             children,
-            vscode.TreeItemCollapsibleState.Collapsed
+            folderCollapsibleState(fullPath, expandedKeys)
           )
         );
         continue;

@@ -29,7 +29,6 @@ export function registerCommands(
   refreshProject: (csprojPath: string) => void,
   refreshFull: () => void
 ): void {
-  // ----- 文件夹：新建文件 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.newFile', async (arg: unknown) => {
       const item = getItemFromArg(arg);
@@ -37,12 +36,12 @@ export function registerCommands(
       const folderPath = item.fullPath;
       const projectDir = path.dirname(item.projectCsprojPath);
       const fileName = await vscode.window.showInputBox({
-        title: '新建文件',
-        prompt: '输入文件名（可含扩展名，如 MyScript.cs）',
+        title: 'New File',
+        prompt: 'Enter file name (with extension, e.g. MyScript.cs)',
         value: 'NewScript.cs',
         validateInput: (value) => {
-          if (!value.trim()) return '请输入文件名';
-          if (/[<>:"/\\|?*]/.test(value)) return '文件名不能包含 \\ / : * ? " < > |';
+          if (!value.trim()) return 'Enter a file name';
+          if (/[<>:"/\\|?*]/.test(value)) return 'Name cannot contain \\ / : * ? " < > |';
           return null;
         },
       });
@@ -51,15 +50,15 @@ export function registerCommands(
       let ext = path.extname(name);
       if (!ext) {
         const picked = await vscode.window.showQuickPick(NEW_FILE_EXTENSIONS, {
-          title: '选择文件类型',
-          placeHolder: '默认 .cs',
+          title: 'Select File Type',
+          placeHolder: 'Default .cs',
         });
         ext = picked?.ext ?? '.cs';
         name = name + ext;
       }
       const fullPath = path.join(folderPath, name);
       if (fs.existsSync(fullPath)) {
-        vscode.window.showWarningMessage(`文件已存在: ${name}`);
+        vscode.window.showWarningMessage(`File already exists: ${name}`);
         return;
       }
       ensureFolderExists(folderPath);
@@ -78,7 +77,6 @@ export function registerCommands(
     })
   );
 
-  // ----- 文件夹：重命名 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.renameFolder', async (arg: unknown) => {
       const item = getItemFromArg(arg);
@@ -87,20 +85,20 @@ export function registerCommands(
       const parentDir = path.dirname(oldPath);
       const oldName = path.basename(oldPath);
       const newName = await vscode.window.showInputBox({
-        title: '重命名文件夹',
+        title: 'Rename Folder',
         value: oldName,
-        prompt: '输入新文件夹名',
+        prompt: 'Enter new folder name',
         validateInput: (value) => {
-          if (!value.trim()) return '请输入名称';
-          if (/[<>:"/\\|?*]/.test(value)) return '名称不能包含 \\ / : * ? " < > |';
-          if (value === oldName) return '名称未改变';
+          if (!value.trim()) return 'Enter a name';
+          if (/[<>:"/\\|?*]/.test(value)) return 'Name cannot contain \\ / : * ? " < > |';
+          if (value === oldName) return 'Name unchanged';
           return null;
         },
       });
       if (!newName?.trim() || newName.trim() === oldName) return;
       const newPath = path.join(parentDir, newName.trim());
       if (fs.existsSync(newPath)) {
-        vscode.window.showErrorMessage('目标文件夹已存在');
+        vscode.window.showErrorMessage('Target folder already exists');
         return;
       }
       try {
@@ -113,14 +111,13 @@ export function registerCommands(
           if (relNew && !relNew.startsWith('..')) pendingStore.addFolder(item.projectCsprojPath, relNew);
         }
         refreshAfterAction(item, refreshProject, refreshFull);
-        vscode.window.showInformationMessage('文件夹已重命名');
+        vscode.window.showInformationMessage('Folder renamed');
       } catch (e) {
-        vscode.window.showErrorMessage('重命名失败: ' + (e as Error).message);
+        vscode.window.showErrorMessage('Rename failed: ' + (e as Error).message);
       }
     })
   );
 
-  // ----- 文件夹：新建子文件夹 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.newFolder', async (arg: unknown) => {
       const item = getItemFromArg(arg);
@@ -128,42 +125,41 @@ export function registerCommands(
       const folderPath = item.fullPath;
       const projectDir = path.dirname(item.projectCsprojPath);
       const name = await vscode.window.showInputBox({
-        title: '新建文件夹',
-        prompt: '输入文件夹名',
+        title: 'New Folder',
+        prompt: 'Enter folder name',
         value: 'NewFolder',
         validateInput: (value) => {
-          if (!value.trim()) return '请输入名称';
-          if (/[<>:"/\\|?*]/.test(value)) return '名称不能包含 \\ / : * ? " < > |';
+          if (!value.trim()) return 'Enter a name';
+          if (/[<>:"/\\|?*]/.test(value)) return 'Name cannot contain \\ / : * ? " < > |';
           return null;
         },
       });
       if (!name?.trim()) return;
       const newPath = path.join(folderPath, name.trim());
       if (fs.existsSync(newPath)) {
-        vscode.window.showWarningMessage('该文件夹已存在');
+        vscode.window.showWarningMessage('Folder already exists');
         return;
       }
       fs.mkdirSync(newPath, { recursive: true });
       const relFolder = path.relative(projectDir, newPath);
       if (relFolder && !relFolder.startsWith('..')) pendingStore.addFolder(item.projectCsprojPath, relFolder);
       refreshAfterAction(item, refreshProject, refreshFull);
-      vscode.window.showInformationMessage('文件夹已创建');
+      vscode.window.showInformationMessage('Folder created');
     })
   );
 
-  // ----- 文件夹：删除 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.deleteFolder', async (arg: unknown) => {
       const item = getItemFromArg(arg);
       if (!item || item.type !== 'folder') return;
       const folderPath = item.fullPath;
       const confirm = await vscode.window.showWarningMessage(
-        `确定要删除文件夹 "${path.basename(folderPath)}" 及其下所有内容？`,
+        `Delete folder "${path.basename(folderPath)}" and all its contents?`,
         { modal: true },
-        '删除',
-        '取消'
+        'Delete',
+        'Cancel'
       );
-      if (confirm !== '删除') return;
+      if (confirm !== 'Delete') return;
       try {
         if (item.projectCsprojPath) {
           const projectDir = path.dirname(item.projectCsprojPath);
@@ -171,14 +167,13 @@ export function registerCommands(
         }
         fs.rmSync(folderPath, { recursive: true });
         refreshAfterAction(item, refreshProject, refreshFull);
-        vscode.window.showInformationMessage('文件夹已删除');
+        vscode.window.showInformationMessage('Folder deleted');
       } catch (e) {
-        vscode.window.showErrorMessage('删除失败: ' + (e as Error).message);
+        vscode.window.showErrorMessage('Delete failed: ' + (e as Error).message);
       }
     })
   );
 
-  // ----- 文件夹：在资源管理器中打开 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.revealFolderInExplorer', (arg: unknown) => {
       const item = getItemFromArg(arg);
@@ -195,17 +190,15 @@ export function registerCommands(
     })
   );
 
-  // ----- 文件夹：复制绝对路径 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.copyFolderPath', async (arg: unknown) => {
       const item = getItemFromArg(arg);
       if (!item || item.type !== 'folder') return;
       await vscode.env.clipboard.writeText(item.fullPath);
-      vscode.window.showInformationMessage('已复制路径');
+      vscode.window.showInformationMessage('Path copied');
     })
   );
 
-  // ----- 文件：重命名 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.renameFile', async (arg: unknown) => {
       const item = getItemFromArg(arg);
@@ -214,20 +207,20 @@ export function registerCommands(
       const dir = path.dirname(oldPath);
       const oldName = path.basename(oldPath);
       const newName = await vscode.window.showInputBox({
-        title: '重命名文件',
+        title: 'Rename File',
         value: oldName,
-        prompt: '输入新文件名',
+        prompt: 'Enter new file name',
         validateInput: (value) => {
-          if (!value.trim()) return '请输入文件名';
-          if (/[<>:"/\\|?*]/.test(value)) return '文件名不能包含 \\ / : * ? " < > |';
-          if (value === oldName) return '名称未改变';
+          if (!value.trim()) return 'Enter a file name';
+          if (/[<>:"/\\|?*]/.test(value)) return 'Name cannot contain \\ / : * ? " < > |';
+          if (value === oldName) return 'Name unchanged';
           return null;
         },
       });
       if (!newName?.trim() || newName.trim() === oldName) return;
       const newPath = path.join(dir, newName.trim());
       if (fs.existsSync(newPath)) {
-        vscode.window.showErrorMessage('目标文件已存在');
+        vscode.window.showErrorMessage('Target file already exists');
         return;
       }
       try {
@@ -239,26 +232,25 @@ export function registerCommands(
         }
         fs.renameSync(oldPath, newPath);
         refreshAfterAction(item, refreshProject, refreshFull);
-        vscode.window.showInformationMessage('文件已重命名');
+        vscode.window.showInformationMessage('File renamed');
       } catch (e) {
-        vscode.window.showErrorMessage('重命名失败: ' + (e as Error).message);
+        vscode.window.showErrorMessage('Rename failed: ' + (e as Error).message);
       }
     })
   );
 
-  // ----- 文件：删除 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.deleteFile', async (arg: unknown) => {
       const item = getItemFromArg(arg);
       if (!item || item.type !== 'file') return;
       const filePath = item.fullPath;
       const confirm = await vscode.window.showWarningMessage(
-        `确定要删除文件 "${path.basename(filePath)}"？`,
+        `Delete file "${path.basename(filePath)}"?`,
         { modal: true },
-        '删除',
-        '取消'
+        'Delete',
+        'Cancel'
       );
-      if (confirm !== '删除') return;
+      if (confirm !== 'Delete') return;
       try {
         if (item.projectCsprojPath) {
           const projectDir = path.dirname(item.projectCsprojPath);
@@ -266,14 +258,13 @@ export function registerCommands(
         }
         fs.unlinkSync(filePath);
         refreshAfterAction(item, refreshProject, refreshFull);
-        vscode.window.showInformationMessage('文件已删除');
+        vscode.window.showInformationMessage('File deleted');
       } catch (e) {
-        vscode.window.showErrorMessage('删除失败: ' + (e as Error).message);
+        vscode.window.showErrorMessage('Delete failed: ' + (e as Error).message);
       }
     })
   );
 
-  // ----- 文件：在资源管理器中打开所在文件夹 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.revealFileInExplorer', (arg: unknown) => {
       const item = getItemFromArg(arg);
@@ -289,13 +280,12 @@ export function registerCommands(
     })
   );
 
-  // ----- 文件：复制绝对路径 -----
   context.subscriptions.push(
     vscode.commands.registerCommand('unitySolutionExplorer.copyFilePath', async (arg: unknown) => {
       const item = getItemFromArg(arg);
       if (!item || item.type !== 'file') return;
       await vscode.env.clipboard.writeText(item.fullPath);
-      vscode.window.showInformationMessage('已复制路径');
+      vscode.window.showInformationMessage('Path copied');
     })
   );
 }
