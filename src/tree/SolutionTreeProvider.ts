@@ -456,6 +456,15 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         );
       }
     }
+
+    // 排序：有效项目在前，再按 label 字母序
+    nodes.sort((a, b) => {
+      const aValid = a.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+      const bValid = b.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+    });
+
     return nodes;
   }
 
