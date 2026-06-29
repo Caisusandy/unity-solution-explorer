@@ -1,6 +1,6 @@
 # Unity Solution Explorer
 
-在 Cursor / VSCode 侧边栏按 .sln 和 .csproj 展示 Unity 解决方案与程序集结构（如 Assembly-CSharp、Assembly-CSharp-Editor），自动忽略非 Unity 编辑文件，并支持多种资源文件的展示与右键操作。
+在 Cursor / VSCode 侧边栏按 .sln/.slnx 和 .csproj 展示 Unity 解决方案与程序集结构（如 Assembly-CSharp、Assembly-CSharp-Editor），自动忽略非 Unity 编辑文件，并支持多种资源文件的展示与右键操作。
 
 
 
@@ -10,7 +10,7 @@
 
 ## English
 
-Browse Unity .sln and .csproj in the sidebar (Cursor / VS Code). Shows solution and assembly structure (e.g. Assembly-CSharp, Assembly-CSharp-Editor), automatically ignores non-Unity editor files, and supports multiple file types with right-click actions. **v1.1.3+:** extra extensions (e.g. `.dll`) can be listed in `.vscode/unity-solution-explorer.json` (`additionalFileExtensions`) or in settings, merged with the built-in set for items under Compile/None/Content in the csproj.
+Browse Unity .sln/.slnx and .csproj in the sidebar (Cursor / VS Code). Shows solution and assembly structure (e.g. Assembly-CSharp, Assembly-CSharp-Editor), automatically ignores non-Unity editor files, and supports multiple file types with right-click actions. **v1.1.3+:** extra extensions (e.g. `.dll`) can be listed in `.vscode/unity-solution-explorer.json` (`additionalFileExtensions`) or in settings, merged with the built-in set for items under Compile/None/Content in the csproj.
 
 **Drag and drop:** Move files/folders within the **same** assembly (same `.csproj`) by dropping onto a folder, project root, or file (drops into that file’s parent folder). A **modal confirmation** lists items before any rename on disk. You can drag items to **Chat** or the **editor** to attach/open. Multi-select is supported. Cross-assembly moves are not supported.
 
@@ -20,7 +20,7 @@ Browse Unity .sln and .csproj in the sidebar (Cursor / VS Code). Shows solution 
 
 ## 功能概览
 
-- **解决方案树**：自动发现 .sln，按程序集展示；支持排除指定项目。自动忽略非 Unity 编辑文件。
+- **解决方案树**：自动发现 .sln/.slnx，按程序集展示；支持排除指定项目。自动忽略非 Unity 编辑文件。
 - **多类型文件**：默认展示 .cs、.shader、.xml、.txt、.json（由 .csproj 的 Compile/None/Content 解析）。**1.1.3+** 可通过工作区 JSON 或设置增加扩展名（如 `.dll`），见下文「工作区配置」。
 - **文件夹右键**：新建文件（含模板）、新建文件夹、重命名、删除（确认）、在系统资源管理器中打开、复制绝对路径。
 - **文件右键**：重命名、删除（确认）、在资源管理器中打开所在文件夹、复制绝对路径。

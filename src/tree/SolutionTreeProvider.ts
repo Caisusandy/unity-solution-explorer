@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseSln } from '../parser/slnParser';
+import { parseSlnx } from '../parser/slnxParser';
 import { parseCsproj } from '../parser/csprojParser';
 import { getExcludeProjects, getExtraSolutionFolders, getMergedSupportedExtensions } from '../config';
 import { PendingStore } from '../pendingStore';
@@ -283,17 +284,26 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         null,
         50
       );
-      for (const uri of slnFiles) {
+      const slnxFiles = await vscode.workspace.findFiles(
+        new vscode.RelativePattern(folder, '**/*.slnx'),
+        null,
+        50
+      );
+      const solutionFiles = [...slnFiles, ...slnxFiles].sort((a, b) =>
+        a.fsPath.localeCompare(b.fsPath, undefined, { sensitivity: 'base' })
+      );
+      for (const uri of solutionFiles) {
         const slnPath = uri.fsPath;
         if (seenSlns.has(slnPath)) continue;
         seenSlns.add(slnPath);
         try {
           const content = fs.readFileSync(slnPath, 'utf-8');
-          const projects = parseSln(slnPath, content);
+          const solutionExt = path.extname(slnPath).toLowerCase();
+          const projects = solutionExt === '.slnx' ? parseSlnx(slnPath, content) : parseSln(slnPath, content);
           const excludeSet = new Set(getExcludeProjects().map((n) => n.trim()).filter(Boolean));
           const filtered =
             excludeSet.size > 0 ? projects.filter((p) => !excludeSet.has(p.name)) : projects;
-          const solutionName = path.basename(slnPath, '.sln');
+          const solutionName = path.basename(slnPath, solutionExt);
           const projectNodes = await this.loadProjectNodes(filtered, expandedKeys);
           const rootChildren = [...projectNodes, ...extraFolderNodes];
           const solutionItem = new SolutionTreeItem(
@@ -323,7 +333,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     if (roots.length === 0) {
       return [
         new SolutionTreeItem(
-          'No .sln file found',
+          'No .sln or .slnx file found',
           'solution',
           '',
           undefined,
