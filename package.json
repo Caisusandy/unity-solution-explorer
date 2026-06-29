@@ -2,7 +2,7 @@
   "name": "unity-solution-explorer",
   "displayName": "Unity Solution Explorer",
   "description": "Browse Unity .sln/.slnx/.csproj in the sidebar; ignores non-Unity editor files; drag-drop move within assembly, open in editor/Chat; supports .cs/.shader/.xml and right-click add/rename/delete. 在侧边栏按 .sln/.slnx/.csproj 展示 Unity 解决方案与程序集结构，支持树内拖拽移动（确认后）、拖入编辑器/聊天、多选拖拽，以及 .cs/.shader/.xml/.txt/.json、右键新建/重命名/删除、排除项目配置",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "publisher": "Seacysin",
   "engines": {
     "vscode": "^1.74.0"

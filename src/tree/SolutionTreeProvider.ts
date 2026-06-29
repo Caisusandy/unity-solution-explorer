@@ -265,7 +265,7 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
     workspaceFolders: readonly vscode.WorkspaceFolder[]
   ): Promise<SolutionTreeItem[]> {
     const roots: SolutionTreeItem[] = [];
-    const seenSlns = new Set<string>();
+    const seenSolutionPaths = new Set<string>();
     this.projectNodeByCsprojPath.clear();
     this.projectDirByCsprojPath.clear();
     this.filePathToItem.clear();
@@ -289,13 +289,11 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
         null,
         50
       );
-      const solutionFiles = [...slnFiles, ...slnxFiles].sort((a, b) =>
-        a.fsPath.localeCompare(b.fsPath, undefined, { sensitivity: 'base' })
-      );
+      const solutionFiles = this.preferSlnxOverSln([...slnFiles, ...slnxFiles]);
       for (const uri of solutionFiles) {
         const slnPath = uri.fsPath;
-        if (seenSlns.has(slnPath)) continue;
-        seenSlns.add(slnPath);
+        if (seenSolutionPaths.has(slnPath)) continue;
+        seenSolutionPaths.add(slnPath);
         try {
           const content = fs.readFileSync(slnPath, 'utf-8');
           const solutionExt = path.extname(slnPath).toLowerCase();
@@ -342,6 +340,35 @@ export class SolutionTreeProvider implements vscode.TreeDataProvider<SolutionTre
       ];
     }
     return roots;
+  }
+
+  /** Same directory + same base name: prefer .slnx over legacy .sln (migration coexistence). */
+  private preferSlnxOverSln(uris: vscode.Uri[]): vscode.Uri[] {
+    const byKey = new Map<string, vscode.Uri>();
+    for (const uri of uris) {
+      const fsPath = uri.fsPath;
+      const ext = path.extname(fsPath).toLowerCase();
+      const key = this.solutionPairKey(fsPath);
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, uri);
+        continue;
+      }
+      const existingExt = path.extname(existing.fsPath).toLowerCase();
+      if (existingExt === '.sln' && ext === '.slnx') {
+        byKey.set(key, uri);
+      }
+    }
+    return [...byKey.values()].sort((a, b) =>
+      a.fsPath.localeCompare(b.fsPath, undefined, { sensitivity: 'base' })
+    );
+  }
+
+  private solutionPairKey(solutionPath: string): string {
+    const dir = path.dirname(solutionPath);
+    const base = path.basename(solutionPath, path.extname(solutionPath));
+    const key = path.join(dir, base);
+    return process.platform === 'win32' ? key.toLowerCase() : key;
   }
 
   private buildExtraSolutionFolderNodes(

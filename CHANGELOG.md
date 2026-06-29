@@ -1,5 +1,11 @@
 # 更新日志
 
+## 1.1.6
+
+- **支持 .slnx 解决方案格式**（感谢 @Caisusandy 贡献）：自动发现 XML 格式的 `.slnx` 文件并解析其中的 `.csproj` 引用
+- **迁移期去重**：同一目录下若同时存在同名 `.sln` 与 `.slnx`（如 `MyGame.sln` / `MyGame.slnx`），仅展示 `.slnx`，避免重复 Solution 树
+- **slnx 解析改进**：修正 XML 实体解码顺序；优先使用 `DisplayName` 属性作为程序集显示名（与 `.sln` 行为一致，便于 `excludeProjects` 配置匹配）
+
 ## 1.1.5
 
 - **修复切回 IDE 后树全部折叠**：移除窗口重新获得焦点时的自动整树刷新；folder 展开状态与 project 一并持久化到工作区，手动刷新或 csproj 变更后仍可恢复

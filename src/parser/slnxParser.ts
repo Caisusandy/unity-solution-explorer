@@ -3,11 +3,11 @@ import type { SlnProject } from './slnParser';
 
 function decodeXmlAttribute(value: string): string {
   return value
+    .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
+    .replace(/&gt;/g, '>');
 }
 
 /**
@@ -24,7 +24,10 @@ export function parseSlnx(slnxPath: string, content: string): SlnProject[] {
     if (!relativePath.toLowerCase().endsWith('.csproj')) continue;
 
     const absolutePath = path.resolve(slnxDir, relativePath);
-    const name = path.basename(relativePath, path.extname(relativePath));
+    const displayNameMatch = m[0].match(/\bDisplayName\s*=\s*(["'])(.*?)\1/i);
+    const name = displayNameMatch
+      ? decodeXmlAttribute(displayNameMatch[2].trim())
+      : path.basename(relativePath, path.extname(relativePath));
     projects.push({ name, relativePath, absolutePath, id: relativePath });
   }
 
